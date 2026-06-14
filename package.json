@@ -1,0 +1,26 @@
+{
+  "name": "jettis-game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run build -w shared && concurrently -k -n server,client -c cyan,magenta \"npm run dev:api -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w shared && npm run build -w client && npm run build -w server",
+    "test": "npm run build -w shared && npm run test -w shared && npm run test -w server",
+    "typecheck": "npm run build -w shared && npm run typecheck -w shared && npm run typecheck -w client && npm run typecheck -w server",
+    "start": "npm run start -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
