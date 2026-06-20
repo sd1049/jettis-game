@@ -11,6 +11,10 @@ export default defineConfig({
       "/ws": {
         target: "ws://127.0.0.1:8787",
         ws: true
+      },
+      "/darkness-ws": {
+        target: "ws://127.0.0.1:8787",
+        ws: true
       }
     }
   }
