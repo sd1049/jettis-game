@@ -7,6 +7,7 @@ import {
   DARKNESS_SHIELD_COOLDOWN_MS,
   DARKNESS_SHIELD_DURATION_MS,
   DARKNESS_STUN_MS,
+  DARKNESS_TOUCH_SPEED_MULTIPLIER,
   DARKNESS_WORLD_SIZE,
   DARKNESS_ZAP_COOLDOWN_MS,
   DARKNESS_ZAP_RANGE
@@ -36,6 +37,7 @@ export function addPlayerToDarknessWorld(
   }
   const player = createDarknessPlayer(playerId, name, world, now);
   world.players[player.id] = player;
+  ensureMinimumDarknessCoinSupply(world, now);
   world.updatedAt = now;
   world.events.unshift({
     id: `darkness-join-${now}`,
@@ -68,8 +70,10 @@ export function applyDarknessInput(
   const length = Math.hypot(input.moveX, input.moveY);
   if (length > 0) {
     const scale = Math.min(1, length);
-    const dx = (input.moveX / length) * scale * DARKNESS_PLAYER_SPEED * (deltaMs / 1000);
-    const dy = (input.moveY / length) * scale * DARKNESS_PLAYER_SPEED * (deltaMs / 1000);
+    const speedMultiplier = input.control === "touch" || input.control === "pointer" ? DARKNESS_TOUCH_SPEED_MULTIPLIER : 1;
+    const speed = DARKNESS_PLAYER_SPEED * speedMultiplier;
+    const dx = (input.moveX / length) * scale * speed * (deltaMs / 1000);
+    const dy = (input.moveY / length) * scale * speed * (deltaMs / 1000);
     player.position = clampPosition({ x: player.position.x + dx, y: player.position.y + dy });
   }
 
@@ -192,6 +196,7 @@ export function tickDarknessWorld(world: DarknessWorldState, now = Date.now()): 
       createdAt: now
     });
   }
+  ensureMinimumDarknessCoinSupply(world, now);
   world.updatedAt = now;
   return world;
 }
@@ -253,6 +258,50 @@ function clampPosition(position: DarknessVec2): DarknessVec2 {
     x: Math.max(24, Math.min(DARKNESS_WORLD_SIZE.width - 24, position.x)),
     y: Math.max(24, Math.min(DARKNESS_WORLD_SIZE.height - 24, position.y))
   };
+}
+
+function ensureMinimumDarknessCoinSupply(world: DarknessWorldState, now: number): void {
+  if (world.winnerPlayerId) {
+    return;
+  }
+
+  const minimumTotal = world.house.price * 2 + 20;
+  const currentTotal =
+    world.coins.reduce((sum, coin) => sum + coin.value, 0) +
+    Object.values(world.players).reduce((sum, player) => sum + player.coins, 0);
+  let needed = minimumTotal - currentTotal;
+  if (needed <= 0) {
+    return;
+  }
+
+  let added = 0;
+  let index = 0;
+  while (needed > 0) {
+    const value = Math.min(2, needed);
+    world.coins.push({
+      id: `catchup-${now}-${index}`,
+      position: catchupCoinPosition(world, world.coins.length + index),
+      value
+    });
+    needed -= value;
+    added += value;
+    index += 1;
+  }
+  world.events.unshift({
+    id: `darkness-catchup-coins-${now}`,
+    kind: "coin",
+    message: `${added} more coin${added === 1 ? "" : "s"} glimmered in the cave.`,
+    createdAt: now
+  });
+}
+
+function catchupCoinPosition(world: DarknessWorldState, index: number): DarknessVec2 {
+  const angle = index * 2.399963229728653 + world.code.length;
+  const radius = 92 + (index % 7) * 21;
+  return clampPosition({
+    x: world.house.position.x + Math.cos(angle) * radius,
+    y: world.house.position.y + Math.sin(angle) * radius
+  });
 }
 
 function distance(a: DarknessVec2, b: DarknessVec2): number {

@@ -8,7 +8,8 @@ import type {
 
 export const darknessInputSchema = z.object({
   moveX: z.number().finite().min(-1).max(1),
-  moveY: z.number().finite().min(-1).max(1)
+  moveY: z.number().finite().min(-1).max(1),
+  control: z.enum(["keyboard", "touch", "pointer"]).optional()
 });
 
 export const joinDarknessWorldSchema = z.object({

@@ -5,6 +5,7 @@ import {
   applyDarknessInput,
   applyDarknessZap,
   buyDarknessHouse,
+  DARKNESS_HOUSE_PRICE,
   forceDarknessPhase,
   parseDarknessClientMessage,
   tickDarknessWorld
@@ -29,6 +30,29 @@ describe("darkness coin rules", () => {
     expect(other.house.position).not.toEqual(first.house.position);
   });
 
+  it("creates enough coin value to avoid a two-player stalemate", () => {
+    const world = createInitialDarknessWorld("COINS", 1000);
+    const totalCoinValue = world.coins.reduce((sum, coin) => sum + coin.value, 0);
+
+    expect(totalCoinValue).toBeGreaterThanOrEqual(DARKNESS_HOUSE_PRICE * 2 + 20);
+  });
+
+  it("spawns catch-up coins when an existing room would stalemate", () => {
+    const world = createInitialDarknessWorld("STALE", 1000);
+    const sister = addPlayerToDarknessWorld(world, "p1", "Sister", 1000).value!;
+    const brother = addPlayerToDarknessWorld(world, "p2", "Brother", 1000).value!;
+    world.coins = [];
+    world.players[sister.id]!.coins = DARKNESS_HOUSE_PRICE - 1;
+    world.players[brother.id]!.coins = DARKNESS_HOUSE_PRICE - 2;
+
+    tickDarknessWorld(world, 2000);
+
+    const availableTotal =
+      world.coins.reduce((sum, coin) => sum + coin.value, 0) +
+      Object.values(world.players).reduce((sum, player) => sum + player.coins, 0);
+    expect(availableTotal).toBeGreaterThanOrEqual(DARKNESS_HOUSE_PRICE * 2 + 20);
+  });
+
   it("collects nearby coins and removes them", () => {
     const world = createInitialDarknessWorld("DARK01", 1000);
     const player = addPlayerToDarknessWorld(world, "p1", "Brother", 1000).value!;
@@ -45,6 +69,29 @@ describe("darkness coin rules", () => {
     expect(result.ok).toBe(true);
     expect(world.players[player.id]!.coins).toBe(2);
     expect(world.coins).toHaveLength(0);
+  });
+
+  it("moves touch and pointer players faster than keyboard players", () => {
+    const keyboardWorld = createInitialDarknessWorld("SPEED1", 1000);
+    const touchWorld = createInitialDarknessWorld("SPEED2", 1000);
+    const pointerWorld = createInitialDarknessWorld("SPEED3", 1000);
+    const keyboardPlayer = addPlayerToDarknessWorld(keyboardWorld, "p1", "Keyboard", 1000).value!;
+    const touchPlayer = addPlayerToDarknessWorld(touchWorld, "p1", "Touch", 1000).value!;
+    const pointerPlayer = addPlayerToDarknessWorld(pointerWorld, "p1", "Pointer", 1000).value!;
+    const keyboardStart = keyboardPlayer.position.x;
+    const touchStart = touchPlayer.position.x;
+    const pointerStart = pointerPlayer.position.x;
+
+    applyDarknessInput(keyboardWorld, keyboardPlayer.id, { moveX: 1, moveY: 0, control: "keyboard" }, 1000, 2000);
+    applyDarknessInput(touchWorld, touchPlayer.id, { moveX: 1, moveY: 0, control: "touch" }, 1000, 2000);
+    applyDarknessInput(pointerWorld, pointerPlayer.id, { moveX: 1, moveY: 0, control: "pointer" }, 1000, 2000);
+
+    expect(touchWorld.players[touchPlayer.id]!.position.x - touchStart).toBeGreaterThan(
+      keyboardWorld.players[keyboardPlayer.id]!.position.x - keyboardStart
+    );
+    expect(pointerWorld.players[pointerPlayer.id]!.position.x - pointerStart).toBeGreaterThan(
+      keyboardWorld.players[keyboardPlayer.id]!.position.x - keyboardStart
+    );
   });
 });
 

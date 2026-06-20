@@ -48,7 +48,8 @@ export function useDarknessKeyboardControls(): void {
       }
       const input: DarknessInputState = {
         moveX: axis("KeyD", "ArrowRight") - axis("KeyA", "ArrowLeft"),
-        moveY: axis("KeyS", "ArrowDown") - axis("KeyW", "ArrowUp")
+        moveY: axis("KeyS", "ArrowDown") - axis("KeyW", "ArrowUp"),
+        control: "keyboard"
       };
       state.send({ type: "darkness_input", payload: input });
     }, 80);

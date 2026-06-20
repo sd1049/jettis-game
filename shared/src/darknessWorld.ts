@@ -132,7 +132,7 @@ function createCoins(random: () => number, caves: DarknessCave[], housePosition:
     coins.push({
       id: `coin-${index}`,
       position,
-      value: index % 9 === 0 ? 2 : 1
+      value: index % 4 === 0 ? 2 : 1
     });
   }
   return coins;

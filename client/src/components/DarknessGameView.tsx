@@ -168,7 +168,7 @@ function useDarknessPointerMovement(
   player: DarknessPlayerState | undefined
 ) {
   const send = useDarknessStore((state) => state.send);
-  const target = useRef({ x: 0, y: 0 });
+  const targetPoint = useRef<{ x: number; y: number } | undefined>(undefined);
   const pointerId = useRef<number | undefined>(undefined);
   const worldRef = useRef(world);
   const playerRef = useRef(player);
@@ -180,31 +180,32 @@ function useDarknessPointerMovement(
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      if (target.current.x !== 0 || target.current.y !== 0) {
-        send({ type: "darkness_input", payload: { moveX: target.current.x, moveY: target.current.y } });
+      const currentPlayer = playerRef.current;
+      const currentTarget = targetPoint.current;
+      if (!currentPlayer || !currentTarget) {
+        return;
       }
-    }, 80);
+      const direction = directionToTarget(currentPlayer.position, currentTarget);
+      if (!direction) {
+        targetPoint.current = undefined;
+        return;
+      }
+      send({ type: "darkness_input", payload: { ...direction, control: "pointer" } });
+    }, 50);
     return () => window.clearInterval(interval);
   }, [send]);
 
-  function updateTarget(event: PointerEvent<SVGSVGElement>) {
+  function updateTargetPoint(event: PointerEvent<SVGSVGElement>) {
     const currentWorld = worldRef.current;
-    const currentPlayer = playerRef.current;
-    if (!currentWorld || !currentPlayer || (pointerId.current !== undefined && event.pointerId !== pointerId.current)) {
+    if (!currentWorld || (pointerId.current !== undefined && event.pointerId !== pointerId.current)) {
       return;
     }
 
-    const rect = event.currentTarget.getBoundingClientRect();
-    const point = {
-      x: ((event.clientX - rect.left) / rect.width) * currentWorld.size.width,
-      y: ((event.clientY - rect.top) / rect.height) * currentWorld.size.height
-    };
-    const dx = point.x - currentPlayer.position.x;
-    const dy = point.y - currentPlayer.position.y;
-    const distance = Math.hypot(dx, dy);
-    target.current = distance < 12 ? { x: 0, y: 0 } : { x: dx / distance, y: dy / distance };
-    if (target.current.x !== 0 || target.current.y !== 0) {
-      send({ type: "darkness_input", payload: { moveX: target.current.x, moveY: target.current.y } });
+    targetPoint.current = clampWorldPoint(clientPointToWorldPoint(event), currentWorld);
+    const currentPlayer = playerRef.current;
+    const direction = currentPlayer ? directionToTarget(currentPlayer.position, targetPoint.current) : undefined;
+    if (direction) {
+      send({ type: "darkness_input", payload: { ...direction, control: "pointer" } });
     }
   }
 
@@ -212,7 +213,9 @@ function useDarknessPointerMovement(
     if (event && pointerId.current !== undefined && event.pointerId !== pointerId.current) {
       return;
     }
-    target.current = { x: 0, y: 0 };
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     pointerId.current = undefined;
   }
 
@@ -221,19 +224,50 @@ function useDarknessPointerMovement(
       event.preventDefault();
       pointerId.current = event.pointerId;
       event.currentTarget.setPointerCapture(event.pointerId);
-      updateTarget(event);
+      updateTargetPoint(event);
     },
     onPointerMove: (event: PointerEvent<SVGSVGElement>) => {
       if (pointerId.current === undefined) {
         return;
       }
       event.preventDefault();
-      updateTarget(event);
+      updateTargetPoint(event);
     },
     onPointerUp: release,
-    onPointerCancel: release,
-    onPointerLeave: release
+    onPointerCancel: (event: PointerEvent<SVGSVGElement>) => {
+      targetPoint.current = undefined;
+      release(event);
+    }
   };
+}
+
+function clientPointToWorldPoint(event: PointerEvent<SVGSVGElement>) {
+  const point = event.currentTarget.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const transform = event.currentTarget.getScreenCTM();
+  if (!transform) {
+    return { x: 0, y: 0 };
+  }
+  const worldPoint = point.matrixTransform(transform.inverse());
+  return { x: worldPoint.x, y: worldPoint.y };
+}
+
+function clampWorldPoint(point: { x: number; y: number }, world: DarknessWorldState) {
+  return {
+    x: Math.max(24, Math.min(world.size.width - 24, point.x)),
+    y: Math.max(24, Math.min(world.size.height - 24, point.y))
+  };
+}
+
+function directionToTarget(position: { x: number; y: number }, target: { x: number; y: number }) {
+  const dx = target.x - position.x;
+  const dy = target.y - position.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 18) {
+    return undefined;
+  }
+  return { moveX: dx / distance, moveY: dy / distance };
 }
 
 function DarknessPlayerSprite({ player, local, now }: { player: DarknessPlayerState; local: boolean; now: number }) {
@@ -261,14 +295,15 @@ function DarknessTouchControls() {
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (held.current.x !== 0 || held.current.y !== 0) {
-        send({ type: "darkness_input", payload: { moveX: held.current.x, moveY: held.current.y } });
+        send({ type: "darkness_input", payload: { moveX: held.current.x, moveY: held.current.y, control: "touch" } });
       }
-    }, 80);
+    }, 50);
     return () => window.clearInterval(interval);
   }, [send]);
 
   function hold(x: number, y: number) {
     held.current = { x, y };
+    send({ type: "darkness_input", payload: { moveX: x, moveY: y, control: "touch" } });
   }
 
   function release() {

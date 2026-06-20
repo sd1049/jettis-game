@@ -71,6 +71,7 @@ export interface DarknessWorldState {
 export interface DarknessInputState {
   moveX: number;
   moveY: number;
+  control?: "keyboard" | "touch" | "pointer";
 }
 
 export interface JoinDarknessWorldPayload {
