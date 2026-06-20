@@ -41,10 +41,21 @@ export function JoinScreen() {
 
   function handleJoin(event: FormEvent) {
     event.preventDefault();
+    const worldCode = code.trim().toUpperCase();
+    if (worldCode.length < 4 || worldCode.length > 12) {
+      const message = "Enter a 4-12 character world code.";
+      if (mode === "darkness") {
+        useDarknessStore.getState().pushMessage(message);
+      } else {
+        useGameStore.getState().pushMessage(message);
+      }
+      return;
+    }
+
     if (mode === "darkness") {
-      connectToDarknessWorld({ worldCode: code.trim(), playerName: name.trim() || "Player" });
+      connectToDarknessWorld({ worldCode, playerName: name.trim() || "Player" });
     } else {
-      connectToWorld({ worldCode: code.trim(), playerName: name.trim() || "Player" });
+      connectToWorld({ worldCode, playerName: name.trim() || "Player" });
     }
   }
 
