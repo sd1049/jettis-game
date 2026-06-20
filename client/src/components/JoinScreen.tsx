@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { LogIn, Moon, Plus, Users } from "lucide-react";
+import { Moon, Play, Users } from "lucide-react";
 import { connectToDarknessWorld, createDarknessWorld } from "../darknessNetwork.js";
 import { useDarknessStore } from "../darknessStore.js";
 import { connectToWorld, createWorld } from "../network.js";
@@ -15,20 +15,33 @@ export function JoinScreen() {
   const [name, setName] = useState("Sister");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<HomeGameMode>("blocks");
+  const [mode, setMode] = useState<HomeGameMode>("darkness");
 
-  async function handleCreate() {
+  async function handlePlay(event: FormEvent) {
+    event.preventDefault();
     setBusy(true);
     try {
+      const worldCode = code.trim().toUpperCase();
+      const playerName = name.trim() || "Player";
+      if (worldCode && !/^[A-Z0-9]{4,12}$/.test(worldCode)) {
+        const message = "Enter a 4-12 character world code using letters or numbers.";
+        if (mode === "darkness") {
+          useDarknessStore.getState().pushMessage(message);
+        } else {
+          useGameStore.getState().pushMessage(message);
+        }
+        return;
+      }
+
       if (mode === "darkness") {
-        const newCode = await createDarknessWorld();
-        connectToDarknessWorld({ worldCode: newCode, playerName: name.trim() || "Player" });
+        const targetCode = await createDarknessWorld(worldCode || undefined);
+        connectToDarknessWorld({ worldCode: targetCode, playerName });
       } else {
-        const newCode = await createWorld();
-        connectToWorld({ worldCode: newCode, playerName: name.trim() || "Player" });
+        const targetCode = await createWorld(worldCode || undefined);
+        connectToWorld({ worldCode: targetCode, playerName });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not create world.";
+      const message = error instanceof Error ? error.message : "Could not start world.";
       if (mode === "darkness") {
         useDarknessStore.getState().pushMessage(message);
       } else {
@@ -36,26 +49,6 @@ export function JoinScreen() {
       }
     } finally {
       setBusy(false);
-    }
-  }
-
-  function handleJoin(event: FormEvent) {
-    event.preventDefault();
-    const worldCode = code.trim().toUpperCase();
-    if (worldCode.length < 4 || worldCode.length > 12) {
-      const message = "Enter a 4-12 character world code.";
-      if (mode === "darkness") {
-        useDarknessStore.getState().pushMessage(message);
-      } else {
-        useGameStore.getState().pushMessage(message);
-      }
-      return;
-    }
-
-    if (mode === "darkness") {
-      connectToDarknessWorld({ worldCode, playerName: name.trim() || "Player" });
-    } else {
-      connectToWorld({ worldCode, playerName: name.trim() || "Player" });
     }
   }
 
@@ -73,23 +66,25 @@ export function JoinScreen() {
         </p>
       </div>
 
-      <form className="join-panel" onSubmit={handleJoin}>
+      <form className="join-panel" onSubmit={handlePlay}>
         <div className="mode-picker" aria-label="Game mode">
-          <button
-            type="button"
-            className={mode === "blocks" ? "selected" : ""}
-            onClick={() => setMode("blocks")}
-          >
-            <Users size={18} aria-hidden />
-            3D Block Survival
-          </button>
           <button
             type="button"
             className={mode === "darkness" ? "selected" : ""}
             onClick={() => setMode("darkness")}
+            aria-pressed={mode === "darkness"}
           >
             <Moon size={18} aria-hidden />
             Survival in the Darkness
+          </button>
+          <button
+            type="button"
+            className={mode === "blocks" ? "selected" : ""}
+            onClick={() => setMode("blocks")}
+            aria-pressed={mode === "blocks"}
+          >
+            <Users size={18} aria-hidden />
+            3D Block Survival
           </button>
         </div>
         <label>
@@ -97,7 +92,7 @@ export function JoinScreen() {
           <input value={name} maxLength={20} onChange={(event) => setName(event.target.value)} />
         </label>
         <label>
-          World code
+          World code optional
           <input
             value={code}
             maxLength={12}
@@ -106,13 +101,9 @@ export function JoinScreen() {
           />
         </label>
         <div className="join-actions">
-          <button className="primary" type="button" onClick={handleCreate} disabled={busy || connecting}>
-            <Plus size={18} aria-hidden />
-            New {mode === "darkness" ? "Darkness Room" : "World"}
-          </button>
-          <button type="submit" disabled={!code.trim() || connecting}>
-            <LogIn size={18} aria-hidden />
-            Join
+          <button className="primary" type="submit" disabled={busy || connecting}>
+            <Play size={18} aria-hidden />
+            Play {mode === "darkness" ? "Darkness" : "3D World"}
           </button>
         </div>
         <div className="join-note">

@@ -13,11 +13,11 @@ import { createWorldCode } from "./ids.js";
 
 export interface Persistence {
   init(): Promise<void>;
-  createWorld(): Promise<WorldState>;
+  createWorld(requestedCode?: string): Promise<WorldState>;
   loadWorld(code: string): Promise<WorldState | undefined>;
   saveWorld(world: WorldState): Promise<void>;
   getWorldSummary(code: string): Promise<WorldSummary | undefined>;
-  createDarknessWorld(): Promise<DarknessWorldState>;
+  createDarknessWorld(requestedCode?: string): Promise<DarknessWorldState>;
   loadDarknessWorld(code: string): Promise<DarknessWorldState | undefined>;
   saveDarknessWorld(world: DarknessWorldState): Promise<void>;
   getDarknessWorldSummary(code: string): Promise<DarknessWorldSummary | undefined>;
@@ -31,7 +31,18 @@ export class MemoryPersistence implements Persistence {
     return Promise.resolve();
   }
 
-  async createWorld(): Promise<WorldState> {
+  async createWorld(requestedCode?: string): Promise<WorldState> {
+    if (requestedCode) {
+      const code = normalizeCode(requestedCode);
+      const existing = this.worlds.get(code);
+      if (existing) {
+        return cloneWorld(existing);
+      }
+      const world = createInitialWorld(code);
+      this.worlds.set(code, cloneWorld(world));
+      return cloneWorld(world);
+    }
+
     let code = createWorldCode();
     while (this.worlds.has(code)) {
       code = createWorldCode();
@@ -55,7 +66,18 @@ export class MemoryPersistence implements Persistence {
     return world ? summarize(world) : undefined;
   }
 
-  async createDarknessWorld(): Promise<DarknessWorldState> {
+  async createDarknessWorld(requestedCode?: string): Promise<DarknessWorldState> {
+    if (requestedCode) {
+      const code = normalizeCode(requestedCode);
+      const existing = this.darknessWorlds.get(code);
+      if (existing) {
+        return cloneDarknessWorld(existing);
+      }
+      const world = createInitialDarknessWorld(code);
+      this.darknessWorlds.set(code, cloneDarknessWorld(world));
+      return cloneDarknessWorld(world);
+    }
+
     let code = createWorldCode();
     while (this.darknessWorlds.has(code)) {
       code = createWorldCode();
@@ -119,7 +141,29 @@ export class PostgresPersistence implements Persistence {
     `);
   }
 
-  async createWorld(): Promise<WorldState> {
+  async createWorld(requestedCode?: string): Promise<WorldState> {
+    if (requestedCode) {
+      const code = normalizeCode(requestedCode);
+      const existing = await this.loadWorld(code);
+      if (existing) {
+        return existing;
+      }
+      const world = createInitialWorld(code);
+      try {
+        await this.saveWorld(world);
+        return world;
+      } catch (error) {
+        if (!isUniqueViolation(error)) {
+          throw error;
+        }
+        const createdByOtherRequest = await this.loadWorld(code);
+        if (createdByOtherRequest) {
+          return createdByOtherRequest;
+        }
+        throw error;
+      }
+    }
+
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const world = createInitialWorld(createWorldCode());
       try {
@@ -170,7 +214,29 @@ export class PostgresPersistence implements Persistence {
     return world ? summarize(world) : undefined;
   }
 
-  async createDarknessWorld(): Promise<DarknessWorldState> {
+  async createDarknessWorld(requestedCode?: string): Promise<DarknessWorldState> {
+    if (requestedCode) {
+      const code = normalizeCode(requestedCode);
+      const existing = await this.loadDarknessWorld(code);
+      if (existing) {
+        return existing;
+      }
+      const world = createInitialDarknessWorld(code);
+      try {
+        await this.saveDarknessWorld(world);
+        return world;
+      } catch (error) {
+        if (!isUniqueViolation(error)) {
+          throw error;
+        }
+        const createdByOtherRequest = await this.loadDarknessWorld(code);
+        if (createdByOtherRequest) {
+          return createdByOtherRequest;
+        }
+        throw error;
+      }
+    }
+
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const world = createInitialDarknessWorld(createWorldCode());
       try {
@@ -220,6 +286,10 @@ export function createPersistence(): Persistence {
 
 export function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
+}
+
+export function isValidWorldCode(code: string): boolean {
+  return /^[A-Z0-9]{4,12}$/.test(normalizeCode(code));
 }
 
 function summarize(world: WorldState): WorldSummary {

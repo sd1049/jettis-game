@@ -1,8 +1,12 @@
 import type { DarknessServerMessage, JoinDarknessWorldPayload } from "@jettis/shared";
 import { useDarknessStore } from "./darknessStore.js";
 
-export async function createDarknessWorld(): Promise<string> {
-  const response = await fetch("/api/darkness/worlds", { method: "POST" });
+export async function createDarknessWorld(code?: string): Promise<string> {
+  const response = await fetch("/api/darkness/worlds", {
+    method: "POST",
+    headers: code ? { "Content-Type": "application/json" } : undefined,
+    body: code ? JSON.stringify({ code }) : undefined
+  });
   if (!response.ok) {
     throw new Error("Could not create a Darkness room.");
   }

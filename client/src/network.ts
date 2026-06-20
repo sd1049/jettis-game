@@ -1,8 +1,12 @@
 import type { JoinWorldPayload, ServerMessage } from "@jettis/shared";
 import { useGameStore } from "./store.js";
 
-export async function createWorld(): Promise<string> {
-  const response = await fetch("/api/worlds", { method: "POST" });
+export async function createWorld(code?: string): Promise<string> {
+  const response = await fetch("/api/worlds", {
+    method: "POST",
+    headers: code ? { "Content-Type": "application/json" } : undefined,
+    body: code ? JSON.stringify({ code }) : undefined
+  });
   if (!response.ok) {
     throw new Error("Could not create a world.");
   }

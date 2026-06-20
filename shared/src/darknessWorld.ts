@@ -17,17 +17,19 @@ const PLAYER_COLORS = ["#e24d4d", "#2f8fe8", "#47aa5b", "#f2b43d", "#9b69d8", "#
 const WRISTBAND_COLORS = ["#8ff0ff", "#fff278", "#b8ff8f", "#ff9ee6", "#bba3ff", "#ffb57a"];
 
 export function createInitialDarknessWorld(code: string, now = Date.now()): DarknessWorldState {
-  const caves = createCaves();
+  const random = createSeededRandom(code);
+  const caves = createCaves(random);
+  const housePosition = createHousePosition(random);
   return {
     code,
     version: 1,
     size: DARKNESS_WORLD_SIZE,
     players: {},
-    coins: createCoins(),
+    coins: createCoins(random, caves, housePosition),
     caves,
     house: {
       id: "house-1",
-      position: { x: 804, y: 140 },
+      position: housePosition,
       radius: DARKNESS_HOUSE_RADIUS,
       price: DARKNESS_HOUSE_PRICE
     },
@@ -96,18 +98,37 @@ export function nextDarknessDayNightState(
   };
 }
 
-function createCaves(): DarknessCave[] {
+function createCaves(random: () => number): DarknessCave[] {
   return [
-    { id: "cave-west", position: { x: 138, y: 338 }, radius: 70 },
-    { id: "cave-south", position: { x: 360, y: 522 }, radius: 64 },
-    { id: "cave-north", position: { x: 332, y: 122 }, radius: 58 }
+    {
+      id: "cave-west",
+      position: { x: randomRange(random, 96, 180), y: randomRange(random, 270, 410) },
+      radius: randomRange(random, 62, 76)
+    },
+    {
+      id: "cave-south",
+      position: { x: randomRange(random, 310, 500), y: randomRange(random, 480, 560) },
+      radius: randomRange(random, 56, 70)
+    },
+    {
+      id: "cave-north",
+      position: { x: randomRange(random, 270, 460), y: randomRange(random, 92, 180) },
+      radius: randomRange(random, 52, 66)
+    }
   ];
 }
 
-function createCoins(): DarknessCoin[] {
+function createHousePosition(random: () => number): DarknessVec2 {
+  return {
+    x: randomRange(random, 600, 840),
+    y: randomRange(random, 120, 360)
+  };
+}
+
+function createCoins(random: () => number, caves: DarknessCave[], housePosition: DarknessVec2): DarknessCoin[] {
   const coins: DarknessCoin[] = [];
   for (let index = 0; index < DARKNESS_COIN_COUNT; index += 1) {
-    const position = coinPosition(index);
+    const position = coinPosition(random, index, caves, housePosition);
     coins.push({
       id: `coin-${index}`,
       position,
@@ -117,13 +138,56 @@ function createCoins(): DarknessCoin[] {
   return coins;
 }
 
-function coinPosition(index: number): DarknessVec2 {
+function coinPosition(
+  random: () => number,
+  index: number,
+  caves: DarknessCave[],
+  housePosition: DarknessVec2
+): DarknessVec2 {
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const position = {
+      x: randomRange(random, 96, DARKNESS_WORLD_SIZE.width - 96),
+      y: randomRange(random, 86, DARKNESS_WORLD_SIZE.height - 86)
+    };
+    if (isOpenCoinPosition(position, caves, housePosition)) {
+      return position;
+    }
+  }
+
   const column = index % 7;
   const row = Math.floor(index / 7);
-  const wobbleX = Math.sin(index * 1.91) * 34;
-  const wobbleY = Math.cos(index * 1.37) * 26;
   return {
-    x: 190 + column * 96 + wobbleX,
-    y: 96 + row * 78 + wobbleY
+    x: 160 + column * 106,
+    y: 92 + row * 78
   };
+}
+
+function isOpenCoinPosition(position: DarknessVec2, caves: DarknessCave[], housePosition: DarknessVec2): boolean {
+  if (distance(position, housePosition) < DARKNESS_HOUSE_RADIUS + 54) {
+    return false;
+  }
+  return caves.every((cave) => distance(position, cave.position) > cave.radius + 18);
+}
+
+function createSeededRandom(seedText: string): () => number {
+  let seed = 2166136261;
+  for (let index = 0; index < seedText.length; index += 1) {
+    seed ^= seedText.charCodeAt(index);
+    seed = Math.imul(seed, 16777619);
+  }
+  return () => {
+    seed += 0x6d2b79f5;
+    let value = seed;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomRange(random: () => number, min: number, max: number): number {
+  return min + random() * (max - min);
+}
+
+function distance(a: DarknessVec2, b: DarknessVec2): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }

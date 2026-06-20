@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { WebSocketServer } from "ws";
 import { DarknessRoomManager } from "./darknessRoom.js";
-import { createPersistence, normalizeCode, type Persistence } from "./persistence.js";
+import { createPersistence, isValidWorldCode, normalizeCode, type Persistence } from "./persistence.js";
 import { RoomManager } from "./room.js";
 import { serveStatic } from "./static.js";
 
@@ -92,13 +92,21 @@ async function handleHttp(
   }
 
   if (req.method === "POST" && url.pathname === "/api/worlds") {
-    const world = await persistence.createWorld();
+    const requestedCode = await readRequestedCode(req, res);
+    if (requestedCode === false) {
+      return;
+    }
+    const world = await persistence.createWorld(requestedCode);
     sendJson(res, 201, { code: world.code });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/darkness/worlds") {
-    const world = await persistence.createDarknessWorld();
+    const requestedCode = await readRequestedCode(req, res);
+    if (requestedCode === false) {
+      return;
+    }
+    const world = await persistence.createDarknessWorld(requestedCode);
     sendJson(res, 201, { code: world.code });
     return;
   }
@@ -138,4 +146,36 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
     "Access-Control-Allow-Origin": "*"
   });
   res.end(JSON.stringify(body));
+}
+
+async function readRequestedCode(req: IncomingMessage, res: ServerResponse): Promise<string | undefined | false> {
+  let raw = "";
+  for await (const chunk of req) {
+    raw += chunk.toString();
+  }
+  if (!raw.trim()) {
+    return undefined;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body." });
+    return false;
+  }
+
+  if (!body || typeof body !== "object" || !("code" in body)) {
+    return undefined;
+  }
+
+  const code = (body as { code?: unknown }).code;
+  if (code === undefined || code === null || code === "") {
+    return undefined;
+  }
+  if (typeof code !== "string" || !isValidWorldCode(code)) {
+    sendJson(res, 400, { error: "World code must be 4-12 letters or numbers." });
+    return false;
+  }
+  return normalizeCode(code);
 }

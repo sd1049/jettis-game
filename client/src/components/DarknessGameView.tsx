@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type PointerEvent } from "react";
 import { Coins, Home, Moon, Save, Shield, Zap } from "lucide-react";
 import {
   DARKNESS_HOUSE_PRICE,
-  type DarknessPlayerState
+  type DarknessPlayerState,
+  type DarknessWorldState
 } from "@jettis/shared";
 import { getLocalDarknessPlayer, useDarknessStore } from "../darknessStore.js";
 
@@ -12,6 +13,7 @@ export function DarknessGameView() {
   const send = useDarknessStore((state) => state.send);
   const messages = useDarknessStore((state) => state.messages);
   const player = getLocalDarknessPlayer(world, playerId);
+  const pointerMovement = useDarknessPointerMovement(world, player);
 
   if (!world || !player) {
     return null;
@@ -32,6 +34,7 @@ export function DarknessGameView() {
           viewBox={`0 0 ${world.size.width} ${world.size.height}`}
           role="img"
           aria-label="Survival in the Darkness top-down map"
+          {...pointerMovement}
         >
           <defs>
             <radialGradient id="coinGlow" cx="50%" cy="50%" r="50%">
@@ -158,6 +161,79 @@ export function DarknessGameView() {
       <DarknessTouchControls />
     </section>
   );
+}
+
+function useDarknessPointerMovement(
+  world: DarknessWorldState | undefined,
+  player: DarknessPlayerState | undefined
+) {
+  const send = useDarknessStore((state) => state.send);
+  const target = useRef({ x: 0, y: 0 });
+  const pointerId = useRef<number | undefined>(undefined);
+  const worldRef = useRef(world);
+  const playerRef = useRef(player);
+
+  useEffect(() => {
+    worldRef.current = world;
+    playerRef.current = player;
+  }, [world, player]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (target.current.x !== 0 || target.current.y !== 0) {
+        send({ type: "darkness_input", payload: { moveX: target.current.x, moveY: target.current.y } });
+      }
+    }, 80);
+    return () => window.clearInterval(interval);
+  }, [send]);
+
+  function updateTarget(event: PointerEvent<SVGSVGElement>) {
+    const currentWorld = worldRef.current;
+    const currentPlayer = playerRef.current;
+    if (!currentWorld || !currentPlayer || (pointerId.current !== undefined && event.pointerId !== pointerId.current)) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const point = {
+      x: ((event.clientX - rect.left) / rect.width) * currentWorld.size.width,
+      y: ((event.clientY - rect.top) / rect.height) * currentWorld.size.height
+    };
+    const dx = point.x - currentPlayer.position.x;
+    const dy = point.y - currentPlayer.position.y;
+    const distance = Math.hypot(dx, dy);
+    target.current = distance < 12 ? { x: 0, y: 0 } : { x: dx / distance, y: dy / distance };
+    if (target.current.x !== 0 || target.current.y !== 0) {
+      send({ type: "darkness_input", payload: { moveX: target.current.x, moveY: target.current.y } });
+    }
+  }
+
+  function release(event?: PointerEvent<SVGSVGElement>) {
+    if (event && pointerId.current !== undefined && event.pointerId !== pointerId.current) {
+      return;
+    }
+    target.current = { x: 0, y: 0 };
+    pointerId.current = undefined;
+  }
+
+  return {
+    onPointerDown: (event: PointerEvent<SVGSVGElement>) => {
+      event.preventDefault();
+      pointerId.current = event.pointerId;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      updateTarget(event);
+    },
+    onPointerMove: (event: PointerEvent<SVGSVGElement>) => {
+      if (pointerId.current === undefined) {
+        return;
+      }
+      event.preventDefault();
+      updateTarget(event);
+    },
+    onPointerUp: release,
+    onPointerCancel: release,
+    onPointerLeave: release
+  };
 }
 
 function DarknessPlayerSprite({ player, local, now }: { player: DarknessPlayerState; local: boolean; now: number }) {

@@ -74,7 +74,8 @@ describe("HTTP and WebSocket integration", () => {
 
     const seededWorld = await persistence.loadDarknessWorld(code);
     expect(seededWorld).toBeDefined();
-    const firstSpawn = { x: 116, y: 320 };
+    const firstCave = seededWorld!.caves[0]!;
+    const firstSpawn = { x: firstCave.position.x - 22, y: firstCave.position.y - 18 };
     seededWorld!.coins = [{ id: "test-coin", position: firstSpawn, value: 25 }];
     seededWorld!.house.position = firstSpawn;
     await persistence.saveDarknessWorld(seededWorld!);
@@ -133,6 +134,41 @@ describe("HTTP and WebSocket integration", () => {
     const rejoined = await waitForDarkness(rejoin, "darkness_snapshot");
     expect(rejoined.payload.world.winnerPlayerId).toBe(sisterJoined.payload.playerId);
     rejoin.close();
+  });
+
+  it("creates a requested Darkness code and joins it", async () => {
+    app = await createAppServer(new MemoryPersistence());
+    await app.start(0);
+    const baseUrl = getBaseUrl(app);
+
+    const createResponse = await fetch(`${baseUrl}/api/darkness/worlds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "1234" })
+    });
+    expect(createResponse.status).toBe(201);
+    const { code } = (await createResponse.json()) as { code: string };
+    expect(code).toBe("1234");
+
+    const repeatResponse = await fetch(`${baseUrl}/api/darkness/worlds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: "1234" })
+    });
+    expect(repeatResponse.status).toBe(201);
+    await expect(repeatResponse.json()).resolves.toEqual({ code: "1234" });
+
+    const sister = new WebSocket(`${baseUrl.replace("http", "ws")}/darkness-ws`);
+    await openSocket(sister);
+    const joinedPromise = waitForDarkness(sister, "darkness_joined");
+    const snapshotPromise = waitForDarkness(sister, "darkness_snapshot");
+    sister.send(JSON.stringify({ type: "join_darkness_world", payload: { worldCode: "1234", playerName: "Sister" } }));
+
+    const joined = await joinedPromise;
+    expect(joined.payload.worldCode).toBe("1234");
+    const snapshot = await snapshotPromise;
+    expect(snapshot.payload.world.code).toBe("1234");
+    sister.close();
   });
 });
 

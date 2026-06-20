@@ -18,6 +18,17 @@ describe("darkness protocol validation", () => {
 });
 
 describe("darkness coin rules", () => {
+  it("creates deterministic but varied maps by room code", () => {
+    const first = createInitialDarknessWorld("1234", 1000);
+    const repeat = createInitialDarknessWorld("1234", 1000);
+    const other = createInitialDarknessWorld("5678", 1000);
+
+    expect(repeat.house.position).toEqual(first.house.position);
+    expect(repeat.caves).toEqual(first.caves);
+    expect(repeat.coins.map((coin) => coin.position)).toEqual(first.coins.map((coin) => coin.position));
+    expect(other.house.position).not.toEqual(first.house.position);
+  });
+
   it("collects nearby coins and removes them", () => {
     const world = createInitialDarknessWorld("DARK01", 1000);
     const player = addPlayerToDarknessWorld(world, "p1", "Brother", 1000).value!;
